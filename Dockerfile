@@ -31,7 +31,9 @@ RUN conda create -qy -p /usr/local \
 # Deploy the minimal OS and tools into a clean target layer
 FROM scratch
 
-LABEL maintainer="Cyriac Kandoth <ckandoth@gmail.com>"
+LABEL maintainer="Miguel Brown <brownm28@email.chop.edu>"
+LABEL description="This docker was ported over from https://github.com/mskcc/vcf2maf/releases/tag/v1.6.19 and modified to pull from local port of the repo"
+LABEL original_creator="Cyriac Kandoth <ckandoth@gmail.com>"
 
 COPY --from=builder /install_root /
 COPY --from=builder /usr/local /usr/local
