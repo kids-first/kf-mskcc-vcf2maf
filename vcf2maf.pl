@@ -13,9 +13,9 @@ use Config;
 
 # Set any default paths and constants
 my ( $tumor_id, $normal_id ) = ( "TUMOR", "NORMAL" );
-my ( $vep_path, $vep_data, $vep_forks, $buffer_size, $any_allele, $inhibit_vep, $online ) = ( "$ENV{HOME}/miniconda3/bin", "$ENV{HOME}/.vep", 4, 5000, 0, 0, 0 );
+my ( $vep_path, $vep_data, $vep_forks, $buffer_size, $any_allele, $inhibit_vep, $online, $use_kf_fields ) = ( "$ENV{HOME}/miniconda3/bin", "$ENV{HOME}/.vep", 4, 5000, 0, 0, 0, 0 );
 my ( $ref_fasta, $filter_vcf ) = ( "$ENV{HOME}/.vep/homo_sapiens/101_GRCh37/Homo_sapiens.GRCh37.dna.toplevel.fa.gz", "" );
-my ( $species, $ncbi_build, $cache_version, $maf_center, $retain_info, $retain_fmt, $min_hom_vaf, $max_filter_ac ) = ( "homo_sapiens", "GRCh37", "", ".", "", "", 0.7, 10 );
+my ( $species, $ncbi_build, $cache_version, $maf_center, $retain_info, $retain_fmt, $min_hom_vaf, $max_filter_ac ) = ( "homo_sapiens", "GRCh38", "", ".", "", "", 0.7, 10 );
 my $perl_bin = $Config{perlpath};
 
 # Find out if samtools and tabix are properly installed, and warn the user if it's not
@@ -199,6 +199,7 @@ GetOptions(
     'man!' => \$man,
     'input-vcf=s' => \$input_vcf,
     'output-maf=s' => \$output_maf,
+    'use-kf-fields' => \$use_kf_fields,
     'tmp-dir=s' => \$tmp_dir,
     'tumor-id=s' => \$tumor_id,
     'normal-id=s' => \$normal_id,
@@ -472,15 +473,39 @@ my @maf_header = qw(
     BAM_File Sequencer Tumor_Sample_UUID Matched_Norm_Sample_UUID HGVSc HGVSp HGVSp_Short Transcript_ID
     Exon_Number t_depth t_ref_count t_alt_count n_depth n_ref_count n_alt_count all_effects
 );
+if ($use_kf_fields){
+    @maf_header = qw(
+    Hugo_Symbol Entrez_Gene_Id Center NCBI_Build Chromosome Start_Position End_Position Strand
+    Variant_Classification Variant_Type Reference_Allele Tumor_Seq_Allele1 Tumor_Seq_Allele2
+    dbSNP_RS dbSNP_Val_Status Tumor_Sample_Barcode Matched_Norm_Sample_Barcode
+    Match_Norm_Seq_Allele1 Match_Norm_Seq_Allele2 Tumor_Sample_UUID Matched_Norm_Sample_UUID HGVSc
+    HGVSp HGVSp_Short Transcript_ID
+    Exon_Number t_depth t_ref_count t_alt_count n_depth n_ref_count n_alt_count all_effects
+    );
+}
 
 # Add extra annotation columns to the MAF in a consistent order
 my @ann_cols = qw( Allele Gene Feature Feature_type Consequence cDNA_position CDS_position
+    Protein_position Amino_acids Codons Existing_variation ALLELE_NUM DISTANCE STRAND_VEP SYMBOL
+    SYMBOL_SOURCE HGNC_ID BIOTYPE CANONICAL CCDS ENSP SWISSPROT TREMBL UNIPARC RefSeq SIFT PolyPhen
+    EXON INTRON DOMAINS AF AFR_AF AMR_AF ASN_AF EAS_AF EUR_AF SAS_AF AA_AF EA_AF CLIN_SIG SOMATIC
+    PUBMED MOTIF_NAME MOTIF_POS HIGH_INF_POS MOTIF_SCORE_CHANGE IMPACT PICK VARIANT_CLASS TSL
+    HGVS_OFFSET PHENO MINIMISED ExAC_AF ExAC_AF_AFR ExAC_AF_AMR ExAC_AF_EAS ExAC_AF_FIN ExAC_AF_NFE
+    ExAC_AF_OTH ExAC_AF_SAS GENE_PHENO FILTER flanking_bps vcf_id vcf_qual ExAC_AF_Adj
+    ExAC_AC_AN_Adj ExAC_AC_AN ExAC_AC_AN_AFR ExAC_AC_AN_AMR ExAC_AC_AN_EAS ExAC_AC_AN_FIN
+    ExAC_AC_AN_NFE ExAC_AC_AN_OTH ExAC_AC_AN_SAS ExAC_FILTER gnomAD_AF gnomAD_AFR_AF gnomAD_AMR_AF
+    gnomAD_ASJ_AF gnomAD_EAS_AF gnomAD_FIN_AF gnomAD_NFE_AF gnomAD_OTH_AF gnomAD_SAS_AF );
+
+# Remove ExAC cols - not present ih hg38. Neither is ASN_AF oddly...
+if ($ncbi_build eq "GRCh38"){
+    @ann_cols = qw( Allele Gene Feature Feature_type Consequence cDNA_position CDS_position
     Protein_position Amino_acids Codons Existing_variation ALLELE_NUM DISTANCE STRAND_VEP SYMBOL
     SYMBOL_SOURCE HGNC_ID BIOTYPE CANONICAL CCDS ENSP SWISSPROT TREMBL UNIPARC RefSeq SIFT PolyPhen
     EXON INTRON DOMAINS AF AFR_AF AMR_AF EAS_AF EUR_AF SAS_AF AA_AF EA_AF CLIN_SIG SOMATIC
     PUBMED MOTIF_NAME MOTIF_POS HIGH_INF_POS MOTIF_SCORE_CHANGE IMPACT PICK VARIANT_CLASS TSL
     HGVS_OFFSET PHENO MINIMISED GENE_PHENO FILTER flanking_bps vcf_id vcf_qual gnomAD_AF gnomAD_AFR_AF gnomAD_AMR_AF
     gnomAD_ASJ_AF gnomAD_EAS_AF gnomAD_FIN_AF gnomAD_NFE_AF gnomAD_OTH_AF gnomAD_SAS_AF );
+}
 
 my @ann_cols_format; # To store the actual order of VEP data, that may differ between runs
 push( @maf_header, @ann_cols );
@@ -1119,6 +1144,7 @@ __DATA__
 
  --input-vcf      Path to input file in VCF format
  --output-maf     Path to output MAF file
+ --use-kf-fields  Standard MAF fields altered (removed) as some are never populated
  --tmp-dir        Folder to retain intermediate VCFs after runtime [Default: Folder containing input VCF]
  --tumor-id       Tumor_Sample_Barcode to report in the MAF [TUMOR]
  --normal-id      Matched_Norm_Sample_Barcode to report in the MAF [NORMAL]
@@ -1133,7 +1159,7 @@ __DATA__
  --filter-vcf     A VCF for FILTER tag common_variant; Disabled by default []
  --max-filter-ac  Use tag common_variant if the filter-vcf reports a subpopulation AC higher than this [10]
  --species        Ensembl-friendly name of species (e.g. mus_musculus for mouse) [homo_sapiens]
- --ncbi-build     NCBI reference assembly of variants MAF (e.g. GRCm38 for mouse) [GRCh37]
+ --ncbi-build     NCBI reference assembly of variants MAF (e.g. GRCm38 for mouse) [GRCh38]
  --cache-version  Version of offline cache to use with VEP (e.g. 75, 91, 101) [Default: Installed version]
  --maf-center     Variant calling center to report in MAF [.]
  --retain-info    Comma-delimited names of INFO fields to retain as extra columns in MAF []
