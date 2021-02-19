@@ -13,8 +13,8 @@ use Config;
 
 # Set any default paths and constants
 my ( $tumor_id, $normal_id ) = ( "TUMOR", "NORMAL" );
-my ( $vep_path, $vep_data, $vep_forks, $buffer_size, $any_allele, $inhibit_vep, $online, $use_kf_fields ) = ( "$ENV{HOME}/miniconda3/bin", "$ENV{HOME}/.vep", 4, 5000, 0, 0, 0, 0 );
-my ( $ref_fasta, $filter_vcf ) = ( "$ENV{HOME}/.vep/homo_sapiens/101_GRCh37/Homo_sapiens.GRCh37.dna.toplevel.fa.gz", "" );
+my ( $use_kf_fields ) = ( 0 );
+my ( $ref_fasta, $filter_vcf ) = ( "", "" );
 my ( $species, $ncbi_build, $cache_version, $maf_center, $retain_info, $retain_fmt, $min_hom_vaf, $max_filter_ac ) = ( "homo_sapiens", "GRCh38", "", ".", "", "", 0.7, 10 );
 my $perl_bin = $Config{perlpath};
 
@@ -206,13 +206,6 @@ GetOptions(
     'vcf-tumor-id=s' => \$vcf_tumor_id,
     'vcf-normal-id=s' => \$vcf_normal_id,
     'custom-enst=s' => \$custom_enst_file,
-    'vep-path=s' => \$vep_path,
-    'vep-data=s' => \$vep_data,
-    'vep-forks=s' => \$vep_forks,
-    'buffer-size=i' => \$buffer_size,
-    'any-allele!' => \$any_allele,
-    'inhibit-vep!' => \$inhibit_vep,
-    'online!' => \$online,
     'ref-fasta=s' => \$ref_fasta,
     'species=s' => \$species,
     'ncbi-build=s' => \$ncbi_build,
@@ -221,7 +214,6 @@ GetOptions(
     'retain-info=s' => \$retain_info,
     'retain-fmt=s' => \$retain_fmt,
     'min-hom-vaf=s' => \$min_hom_vaf,
-    'remap-chain=s' => \$remap_chain,
     'filter-vcf=s' => \$filter_vcf,
     'max-filter-ac=i' => \$max_filter_ac
 ) or pod2usage( -verbose => 1, -input => \*DATA, -exitval => 2 );
@@ -308,50 +300,7 @@ $orig_vcf_fh->close;
 # Delete the split.vcf created above if we didn't find any variants with the SVTYPE tag
 unlink( "$tmp_dir/$input_name.split.vcf" ) if( $input_vcf ne "$tmp_dir/$input_name.split.vcf" );
 
-# Make sure the --online option is only used with small GRCh38 VCFs
-if( $online ) {
-    ( $var_count < 100 and $ncbi_build eq "GRCh38" ) or die "ERROR: Option --online can only be used with GRCh38 VCFs listing <100 events\n";
-}
 
-# If a liftOver chain was provided, remap and switch the input VCF before annotation
-my ( %remap );
-if( $remap_chain ) {
-    # Find out if liftOver is properly installed, and warn the user if it's not
-    my $liftover = `which liftOver`;
-    chomp( $liftover );
-    ( $liftover and -e $liftover ) or die "ERROR: Please install liftOver, and make sure it's in your PATH\n";
-
-    # Make a BED file from the VCF, run liftOver on it, and create a hash mapping old to new loci
-    `grep -v ^# $input_vcf | cut -f1,2 | awk '{OFS="\\t"; print \$1,\$2-1,\$2,\$1":"\$2}' > $tmp_dir/$input_name.bed`;
-    %remap = map{chomp; my @c=split("\t"); ($c[3], "$c[0]:$c[2]")}`$liftover $tmp_dir/$input_name.bed $remap_chain /dev/stdout /dev/null 2> /dev/null`;
-    unlink( "$tmp_dir/$input_name.bed" );
-
-    # Create a new VCF in the temp folder, with remapped loci on which we'll run annotation
-    my $orig_vcf_fh = IO::File->new( $input_vcf ) or die "ERROR: Couldn't open --input-vcf: $input_vcf!\n";
-    my $remap_vcf_fh = IO::File->new( "$tmp_dir/$input_name.remap.vcf", "w" ) or die "ERROR: Couldn't open VCF: $tmp_dir/$input_name.remap.vcf!\n";
-    while( my $line = $orig_vcf_fh->getline ) {
-        if( $line =~ m/^#/ ) {
-            $remap_vcf_fh->print( $line ); # Write header lines unchanged
-        }
-        else {
-            chomp( $line );
-            my @cols = split( "\t", $line );
-            my $locus = $cols[0] . ":" . $cols[1];
-            if( defined $remap{$locus} ) {
-                # Retain original variant under INFO, so we can append it later to the output MAF
-                $cols[7] = ( !$cols[7] or $cols[7] eq "." ? "" : "$cols[7];" ) . "REMAPPED_POS=" . join( ":", @cols[0,1,3,4] );
-                @cols[0,1] = split( ":", $remap{$locus} );
-                $remap_vcf_fh->print( join( "\t", @cols ), "\n" );
-            }
-            else {
-                warn "WARNING: Skipping variant at $locus; Unable to liftOver using $remap_chain\n";
-            }
-        }
-    }
-    $remap_vcf_fh->close;
-    $orig_vcf_fh->close;
-    $input_vcf = "$tmp_dir/$input_name.remap.vcf";
-}
 
 # Before running annotation, let's pull flanking reference bps for each variant to do some checks,
 # and we'll also pull out overlapping calls from the filter VCF
@@ -376,7 +325,7 @@ $vcf_fh->close;
 my ( $lines, @regions_split ) = ( "", ());
 my @regions = keys %uniq_regions;
 my $chr_prefix_in_use = ( @regions and $regions[0] =~ m/^chr/ ? 1 : 0 );
-push( @regions_split, [ splice( @regions, 0, $buffer_size ) ] ) while @regions;
+push( @regions_split, [ splice( @regions, 0 ) ] ) while @regions;
 map{ my $region = join( " ", sort @{$_} ); $lines .= `$samtools faidx $ref_fasta $region` } @regions_split;
 foreach my $line ( grep( length, split( ">", $lines ))) {
     # Carefully split this FASTA entry, properly chomping newlines for long indels
@@ -398,7 +347,7 @@ if( $filter_vcf ) {
     # Query each variant locus on the filter VCF, using tabix, just like we used samtools earlier
     ( $lines, @regions_split ) = ( "", ());
     my @regions = keys %uniq_loci;
-    push( @regions_split, [ splice( @regions, 0, $buffer_size ) ] ) while @regions;
+    push( @regions_split, [ splice( @regions, 0 ) ] ) while @regions;
     # ::NOTE:: chr-prefix removal works safely here because ExAC is limited to 1..22, X, Y
     map{ my $loci = join( " ", map{s/^chr//; $_} @{$_} ); $lines .= `$tabix $filter_vcf $loci` } @regions_split;
     foreach my $line ( split( "\n", $lines )) {
@@ -431,36 +380,6 @@ foreach my $region ( @ref_regions ) {
 
 # Annotate variants in given VCF to all possible transcripts, unless user requested to skip VEP
 my $output_vcf = $input_vcf;
-unless( $inhibit_vep ) {
-    $output_vcf = ( $remap_chain ? "$tmp_dir/$input_name.remap.vep.vcf" : "$tmp_dir/$input_name.vep.vcf" );
-    warn "STATUS: Running VEP and writing to: $output_vcf\n";
-    # Make sure we can find the VEP script
-    my $vep_script = ( -s "$vep_path/vep" ? "$vep_path/vep" : "$vep_path/variant_effect_predictor.pl" );
-    ( -s $vep_script ) or die "ERROR: Cannot find VEP script under: $vep_path\n";
-
-    # Contruct VEP command using some default options and run it
-    my $vep_cmd = "$perl_bin $vep_script --species $species --assembly $ncbi_build --no_progress --no_stats --buffer_size $buffer_size --sift b --ccds --uniprot --hgvs --symbol --numbers --domains --gene_phenotype --canonical --protein --biotype --uniprot --tsl --variant_class --shift_hgvs 1 --check_existing --total_length --allele_number --no_escape --xref_refseq --failed 1 --vcf --flag_pick_allele --pick_order canonical,tsl,biotype,rank,ccds,length --dir $vep_data --fasta $ref_fasta --format vcf --input_file $input_vcf --output_file $output_vcf";
-    # Change options based on whether we are running in offline mode or not
-    $vep_cmd .= ( $online ? " --database --host useastdb.ensembl.org" : " --offline --pubmed" );
-    # VEP barks if --fork is set to 1. So don't use this argument unless it's >1
-    $vep_cmd .= " --fork $vep_forks" if( $vep_forks > 1 );
-    # Require allele match for co-located variants unless user-rejected or we're using a newer VEP
-    $vep_cmd .= " --check_allele" unless( $any_allele or $vep_script =~ m/vep$/ );
-    # Add --cache-version only if the user specifically asked for a version
-    $vep_cmd .= " --cache_version $cache_version" if( $cache_version );
-    # Add options that only work on human variants
-    if( $species eq "homo_sapiens" ) {
-        # Slight change in options if in offline mode, or if using the newer VEP
-        $vep_cmd .= " --polyphen b" . ( $vep_script =~ m/vep$/ ? " --af" : " --gmaf" );
-        $vep_cmd .= ( $vep_script =~ m/vep$/ ? " --af_1kg --af_esp --af_gnomad" : " --maf_1kg --maf_esp" ) unless( $online );
-    }
-    # Do not use the --regulatory option in situations where we know it will break
-    $vep_cmd .= " --regulatory" unless( $species eq "canis_familiaris" or $online );
-
-    # Make sure it ran without error codes
-    system( $vep_cmd ) == 0 or die "\nERROR: Failed to run the VEP annotator! Command: $vep_cmd\n";
-    ( -s $output_vcf ) or warn "WARNING: VEP-annotated VCF file is missing or empty: $output_vcf\n";
-}
 
 # Define default MAF Header (https://wiki.nci.nih.gov/x/eJaPAQ) with our vcf2maf additions
 my @maf_header = qw(
@@ -475,7 +394,7 @@ my @maf_header = qw(
 );
 if ($use_kf_fields){
     @maf_header = qw(
-    Hugo_Symbol Entrez_Gene_Id Center NCBI_Build Chromosome Start_Position End_Position Strand
+    Hugo_Symbol Center NCBI_Build Chromosome Start_Position End_Position Strand
     Variant_Classification Variant_Type Reference_Allele Tumor_Seq_Allele1 Tumor_Seq_Allele2
     dbSNP_RS dbSNP_Val_Status Tumor_Sample_Barcode Matched_Norm_Sample_Barcode
     Match_Norm_Seq_Allele1 Match_Norm_Seq_Allele2 Tumor_Sample_UUID Matched_Norm_Sample_UUID HGVSc
@@ -519,8 +438,6 @@ if( $retain_info or $remap_chain or $split_svs ) {
     # But let's not overwrite existing columns with the same name
     my %maf_cols = map{ my $c = lc; ( $c, 1 )} @maf_header;
     @addl_info_cols = grep{ my $c = lc; !$maf_cols{$c}} split( ",", $retain_info );
-    # If a remap-chain was used, add a column to retain the original chr:pos:ref:alt
-    push( @addl_info_cols, "REMAPPED_POS" ) if( $remap_chain );
     # If we had to split some SVs earlier, add some columns with some useful info about SVs
     push( @addl_info_cols, qw( Fusion Method Frame CONSENSUS )) if( $split_svs );
     push( @maf_header, @addl_info_cols );
@@ -545,7 +462,7 @@ $script_dir = "." unless( $script_dir );
 
 my $entrez_id_file = "$script_dir/data/ensg_to_entrez_id_map_ensembl_feb2014.tsv";
 my %entrez_id_map = ();
-if( -s $entrez_id_file ) {
+if( -s $entrez_id_file && !$use_kf_fields) {
     %entrez_id_map = map{chomp; split("\t")} `grep -hv ^# $entrez_id_file`;
 }
 
@@ -1151,10 +1068,6 @@ __DATA__
  --vcf-tumor-id   Tumor sample ID used in VCF's genotype columns [--tumor-id]
  --vcf-normal-id  Matched normal ID used in VCF's genotype columns [--normal-id]
  --custom-enst    List of custom ENST IDs that override canonical selection
- --buffer-size    Number of variants VEP loads at a time; Reduce this for low memory systems [5000]
- --any-allele     When reporting co-located variants, allow mismatched variant alleles too
- --inhibit-vep    Skip running VEP, but extract VEP annotation in VCF if found
- --online         Use useastdb.ensembl.org instead of local cache (supports only GRCh38 VCFs listing <100 events)
  --ref-fasta      Reference FASTA file [~/.vep/homo_sapiens/101_GRCh37/Homo_sapiens.GRCh37.dna.toplevel.fa.gz]
  --filter-vcf     A VCF for FILTER tag common_variant; Disabled by default []
  --max-filter-ac  Use tag common_variant if the filter-vcf reports a subpopulation AC higher than this [10]
@@ -1165,7 +1078,6 @@ __DATA__
  --retain-info    Comma-delimited names of INFO fields to retain as extra columns in MAF []
  --retain-fmt     Comma-delimited names of FORMAT fields to retain as extra columns in MAF []
  --min-hom-vaf    If GT undefined in VCF, minimum allele fraction to call a variant homozygous [0.7]
- --remap-chain    Chain file to remap variants to a different assembly before running VEP
  --help           Print a brief help message and quit
  --man            Print the detailed manual
 
