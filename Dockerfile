@@ -40,3 +40,4 @@ COPY --from=builder /usr/local /usr/local
 COPY --from=builder vcf2maf/data /opt/data
 COPY --from=builder vcf2maf/*.pl /opt/
 WORKDIR /opt
+ENTRYPOINT /bin/bash
