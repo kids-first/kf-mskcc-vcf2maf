@@ -2,7 +2,7 @@
   <img src="docs/kids_first_logo.svg" alt="Kids First repository logo" width="660px" />
 </p>
 <p align="center">
-  <a href="https://github.com/kids-first/kf-mskcc-vcf2maf/blob/master/LICENSE"><img src="https://img.shields.io/github/license/kids-first/kf-template-repo.svg?style=for-the-badge"></a>
+  <a href="https://github.com/kids-first/kf-mskcc-vcf2maf/blob/main/LICENSE"><img src="https://img.shields.io/github/license/kids-first/kf-template-repo.svg?style=for-the-badge"></a>
 </p>
 
 # Kids First Port of MSKCC's vcf2maf
@@ -11,8 +11,10 @@ This is a port of MSKCCs [vcf2maf](https://github.com/mskcc/vcf2maf) repository,
 We have modified their `Dockerfile` and dropped deprecated fields from their maf output to suit the needs of Kids First and
 pedcBioportal
 
+### Docker info:
+Docker can be pulled from pgc-images.sbgenomics.com/d3b-bixu/kf_vcf2maf:v1.0.0 or built from scratch from https://github.com/d3b-center/bixtools/kf_vcf2maf/v1.0.0/Dockerfile
 
-### Repo Description
+### Usage:
 
 This port of MSKCCs vcf2maf is a bit more minimal in function in that it is expected that VEP would be run seperately, using recomended commands. For example:
 
@@ -73,5 +75,5 @@ perl /ensembl-vep-release-93.7/vep
 
 Typical usage of the `vcf2maf.pl` script, within the built docker:
 ```
-perl /opt/vcf2maf.pl --input-vcf <input_vcf> --output-maf <output_maf file name> --tumor-id <tumor sample ID> --normal-id <normal sample ID> --custom-enst /opt/data/isoform_overrides_uniprot --ncbi-build GRCh38 --inhibit-vep --retain-info MQ,MQ0,CAL,Hotspot --ref-fasta Homo_sapiens_assembly38.fasta
+perl /opt/vcf2maf.pl --input-vcf <input_vcf> --output-maf <output_maf file name> --tumor-id <tumor sample ID> --normal-id <normal sample ID> --use-kf-fields --custom-enst /opt/data/isoform_overrides_uniprot --ncbi-build GRCh38  --retain-info MQ,MQ0,CAL,Hotspot --ref-fasta Homo_sapiens_assembly38.fasta
 ```
