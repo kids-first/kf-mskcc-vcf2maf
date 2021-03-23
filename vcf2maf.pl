@@ -347,6 +347,7 @@ if( $filter_vcf ) {
     # Query each variant locus on the filter VCF, using tabix, just like we used samtools earlier
     ( $lines, @regions_split ) = ( "", ());
     my @regions = keys %uniq_loci;
+    # Third param is splice helps limit array size and prevents overloading samtool faidx call
     push( @regions_split, [ splice( @regions, 0, 25000 ) ] ) while @regions;
     # ::NOTE:: chr-prefix removal works safely here because ExAC is limited to 1..22, X, Y
     map{ my $loci = join( " ", map{s/^chr//; $_} @{$_} ); $lines .= `$tabix $filter_vcf $loci` } @regions_split;
