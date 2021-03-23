@@ -325,7 +325,7 @@ $vcf_fh->close;
 my ( $lines, @regions_split ) = ( "", ());
 my @regions = keys %uniq_regions;
 my $chr_prefix_in_use = ( @regions and $regions[0] =~ m/^chr/ ? 1 : 0 );
-push( @regions_split, [ splice( @regions, 0 ) ] ) while @regions;
+push( @regions_split, [ splice( @regions, 0, 25000 ) ] ) while @regions;
 map{ my $region = join( " ", sort @{$_} ); $lines .= `$samtools faidx $ref_fasta $region` } @regions_split;
 foreach my $line ( grep( length, split( ">", $lines ))) {
     # Carefully split this FASTA entry, properly chomping newlines for long indels
@@ -347,7 +347,7 @@ if( $filter_vcf ) {
     # Query each variant locus on the filter VCF, using tabix, just like we used samtools earlier
     ( $lines, @regions_split ) = ( "", ());
     my @regions = keys %uniq_loci;
-    push( @regions_split, [ splice( @regions, 0 ) ] ) while @regions;
+    push( @regions_split, [ splice( @regions, 0, 25000 ) ] ) while @regions;
     # ::NOTE:: chr-prefix removal works safely here because ExAC is limited to 1..22, X, Y
     map{ my $loci = join( " ", map{s/^chr//; $_} @{$_} ); $lines .= `$tabix $filter_vcf $loci` } @regions_split;
     foreach my $line ( split( "\n", $lines )) {
