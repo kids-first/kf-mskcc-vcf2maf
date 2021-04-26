@@ -75,5 +75,5 @@ perl /ensembl-vep-release-93.7/vep
 
 Typical usage of the `vcf2maf.pl` script, within the built docker:
 ```
-perl /opt/vcf2maf.pl --input-vcf <input_vcf> --output-maf <output_maf file name> --tumor-id <tumor sample ID> --normal-id <normal sample ID> --use-kf-fields --custom-enst /opt/data/isoform_overrides_uniprot --ncbi-build GRCh38  --retain-info MQ,MQ0,CAL,Hotspot --ref-fasta Homo_sapiens_assembly38.fasta
+perl /opt/vcf2maf.pl --input-vcf <input_vcf> --output-maf <output_maf file name> --tumor-id <tumor sample ID> --normal-id <normal sample ID> --custom-enst /opt/data/isoform_overrides_uniprot --ncbi-build GRCh38  --retain-info MQ,MQ0,CAL,Hotspot --ref-fasta Homo_sapiens_assembly38.fasta
 ```
