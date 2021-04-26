@@ -13,9 +13,8 @@ use Config;
 
 # Set any default paths and constants
 my ( $tumor_id, $normal_id ) = ( "TUMOR", "NORMAL" );
-my ( $use_kf_fields ) = ( 0 );
 my ( $ref_fasta, $filter_vcf ) = ( "", "" );
-my ( $species, $ncbi_build, $cache_version, $maf_center, $retain_info, $retain_fmt, $min_hom_vaf, $max_filter_ac ) = ( "homo_sapiens", "GRCh38", "", ".", "", "", 0.7, 10 );
+my ( $species, $ncbi_build, $maf_center, $retain_info, $retain_fmt, $min_hom_vaf, $max_filter_ac ) = ( "homo_sapiens", "GRCh38", "", ".", "", "", 0.7, 10 );
 my $perl_bin = $Config{perlpath};
 
 # Find out if samtools and tabix are properly installed, and warn the user if it's not
@@ -199,7 +198,6 @@ GetOptions(
     'man!' => \$man,
     'input-vcf=s' => \$input_vcf,
     'output-maf=s' => \$output_maf,
-    'use-kf-fields' => \$use_kf_fields,
     'tmp-dir=s' => \$tmp_dir,
     'tumor-id=s' => \$tumor_id,
     'normal-id=s' => \$normal_id,
@@ -209,7 +207,6 @@ GetOptions(
     'ref-fasta=s' => \$ref_fasta,
     'species=s' => \$species,
     'ncbi-build=s' => \$ncbi_build,
-    'cache-version=s' => \$cache_version,
     'maf-center=s' => \$maf_center,
     'retain-info=s' => \$retain_info,
     'retain-fmt=s' => \$retain_fmt,
@@ -392,16 +389,6 @@ my @maf_header = qw(
     BAM_File Sequencer Tumor_Sample_UUID Matched_Norm_Sample_UUID HGVSc HGVSp HGVSp_Short Transcript_ID
     Exon_Number t_depth t_ref_count t_alt_count n_depth n_ref_count n_alt_count all_effects
 );
-if ($use_kf_fields){
-    @maf_header = qw(
-    Hugo_Symbol Center NCBI_Build Chromosome Start_Position End_Position Strand
-    Variant_Classification Variant_Type Reference_Allele Tumor_Seq_Allele1 Tumor_Seq_Allele2
-    dbSNP_RS dbSNP_Val_Status Tumor_Sample_Barcode Matched_Norm_Sample_Barcode
-    Match_Norm_Seq_Allele1 Match_Norm_Seq_Allele2 Tumor_Sample_UUID Matched_Norm_Sample_UUID HGVSc
-    HGVSp HGVSp_Short Transcript_ID
-    Exon_Number t_depth t_ref_count t_alt_count n_depth n_ref_count n_alt_count all_effects
-    );
-}
 
 # Add extra annotation columns to the MAF in a consistent order
 my @ann_cols = qw( Allele Gene Feature Feature_type Consequence cDNA_position CDS_position
@@ -415,7 +402,7 @@ my @ann_cols = qw( Allele Gene Feature Feature_type Consequence cDNA_position CD
     ExAC_AC_AN_NFE ExAC_AC_AN_OTH ExAC_AC_AN_SAS ExAC_FILTER gnomAD_AF gnomAD_AFR_AF gnomAD_AMR_AF
     gnomAD_ASJ_AF gnomAD_EAS_AF gnomAD_FIN_AF gnomAD_NFE_AF gnomAD_OTH_AF gnomAD_SAS_AF );
 
-# Remove ExAC cols - not present ih hg38. Neither is ASN_AF oddly...
+# Remove ExAC cols - not present in hg38. Neither is ASN_AF oddly...
 if ($ncbi_build eq "GRCh38"){
     @ann_cols = qw( Allele Gene Feature Feature_type Consequence cDNA_position CDS_position
     Protein_position Amino_acids Codons Existing_variation ALLELE_NUM DISTANCE STRAND_VEP SYMBOL
@@ -462,7 +449,7 @@ $script_dir = "." unless( $script_dir );
 
 my $entrez_id_file = "$script_dir/data/ensg_to_entrez_id_map_ensembl_feb2014.tsv";
 my %entrez_id_map = ();
-if( -s $entrez_id_file && !$use_kf_fields) {
+if( -s $entrez_id_file) {
     %entrez_id_map = map{chomp; split("\t")} `grep -hv ^# $entrez_id_file`;
 }
 
@@ -1061,7 +1048,6 @@ __DATA__
 
  --input-vcf      Path to input file in VCF format
  --output-maf     Path to output MAF file
- --use-kf-fields  Standard MAF fields altered (removed) as some are never populated
  --tmp-dir        Folder to retain intermediate VCFs after runtime [Default: Folder containing input VCF]
  --tumor-id       Tumor_Sample_Barcode to report in the MAF [TUMOR]
  --normal-id      Matched_Norm_Sample_Barcode to report in the MAF [NORMAL]
@@ -1073,7 +1059,6 @@ __DATA__
  --max-filter-ac  Use tag common_variant if the filter-vcf reports a subpopulation AC higher than this [10]
  --species        Ensembl-friendly name of species (e.g. mus_musculus for mouse) [homo_sapiens]
  --ncbi-build     NCBI reference assembly of variants MAF (e.g. GRCm38 for mouse) [GRCh38]
- --cache-version  Version of offline cache to use with VEP (e.g. 75, 91, 101) [Default: Installed version]
  --maf-center     Variant calling center to report in MAF [.]
  --retain-info    Comma-delimited names of INFO fields to retain as extra columns in MAF []
  --retain-fmt     Comma-delimited names of FORMAT fields to retain as extra columns in MAF []
